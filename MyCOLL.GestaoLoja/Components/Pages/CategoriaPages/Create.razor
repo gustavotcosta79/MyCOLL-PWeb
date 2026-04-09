@@ -1,0 +1,84 @@
+﻿@page "/categorias/create"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Data
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+
+<PageTitle>Criar Categoria</PageTitle>
+
+<h1>Criar Nova Categoria</h1>
+<hr />
+
+<div class="row">
+    <div class="col-md-6">
+        <EditForm method="post" Model="Categoria" OnValidSubmit="AddCategoria" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+
+            @* Campo Nome *@
+            <div class="mb-3">
+                <label for="nome" class="form-label">Nome da Categoria:</label>
+                <InputText id="nome" @bind-Value="Categoria.Nome" class="form-control" />
+                <ValidationMessage For="() => Categoria.Nome" class="text-danger" />
+            </div>
+
+            @* Dropdown Categoria Pai *@
+            <div class="mb-3">
+                <label for="categoriapai" class="form-label">Categoria Pai (Superior):</label>
+                <InputSelect id="categoriapai" @bind-Value="Categoria.CategoriaPaiId" class="form-control">
+                    <option value="">-- Nenhuma (É uma Categoria Raiz) --</option>
+                    @foreach (var cat in ListaCategorias)
+                    {
+                        <option value="@cat.Id">@cat.Nome</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Categoria.CategoriaPaiId" class="text-danger" />
+            </div>
+
+            @* Campo Nível (Opcional, depende se calculas automático ou manual) *@
+            <div class="mb-3">
+                <label for="nivel" class="form-label">Nível Hierárquico:</label>
+                <InputNumber id="nivel" @bind-Value="Categoria.Nivel" class="form-control" />
+                <ValidationMessage For="() => Categoria.Nivel" class="text-danger" />
+            </div>
+
+            @* Checkbox Ativa *@
+            <div class="mb-3 form-check">
+                <label class="form-check-label">
+                    <InputCheckbox @bind-Value="Categoria.Ativa" class="form-check-input" />
+                    Categoria Ativa?
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Criar</button>
+            <a href="/categorias" class="btn btn-secondary">Cancelar</a>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Categoria Categoria { get; set; } = new();
+
+    // Lista para preencher a dropdown
+    private List<Categoria> ListaCategorias = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        // Carregar todas as categorias existentes para poder escolher como Pai
+        ListaCategorias = await context.Categorias.ToListAsync();
+    }
+
+    private async Task AddCategoria()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Categorias.Add(Categoria);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/categorias");
+    }
+}

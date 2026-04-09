@@ -1,0 +1,111 @@
+﻿@page "/produtos/delete"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Data
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Apagar Produto</PageTitle>
+
+<h1>Apagar Produto</h1>
+
+<h3>Tem a certeza que deseja apagar este registo?</h3>
+
+@if (TemVendas)
+{
+    <div class="alert alert-danger">
+        <strong>Atenção:</strong> Este produto <u>não pode ser apagado</u> fisicamente porque já existem vendas associadas a ele.
+        <br />
+        Solução: Em vez de apagar, edite o produto e mude o estado para <strong>"Suspenso"</strong>.
+    </div>
+}
+
+<div>
+    <h4>Produto</h4>
+    <hr />
+    @if (produto is null)
+    {
+        <p><em>A carregar...</em></p>
+    }
+    else
+    {
+        <dl class="row">
+            <dt class="col-sm-2">Nome</dt>
+            <dd class="col-sm-10">@produto.Nome</dd>
+
+            <dt class="col-sm-2">Preço Venda</dt>
+            <dd class="col-sm-10">@produto.PrecoVenda.ToString("C2")</dd>
+
+            <dt class="col-sm-2">Stock Atual</dt>
+            <dd class="col-sm-10">@produto.Stock</dd>
+
+            <dt class="col-sm-2">Estado</dt>
+            <dd class="col-sm-10">@produto.Estado</dd>
+
+            <dt class="col-sm-2">Categoria</dt>
+            <dd class="col-sm-10">@(produto.Categoria?.Nome ?? produto.CategoriaId.ToString())</dd>
+        </dl>
+
+        <EditForm method="post" Model="produto" OnValidSubmit="DeleteProduto" FormName="delete" Enhance>
+            @* BLOQUEIO: Se tiver vendas, o botão fica desativado *@
+            <button type="submit" class="btn btn-danger" disabled="@(TemVendas || produto is null)">
+                Apagar Definitivamente
+            </button> 
+            |
+            <a href="/produtos" class="btn btn-secondary">Voltar à Lista</a>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private Produto? produto;
+    private bool TemVendas = false; // Variável de controlo
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+        // Carregar produto com Categoria para mostrar o nome (UX melhorada)
+        produto = await context.Produtos
+            .Include(p => p.Categoria)
+            .FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (produto is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+            return;
+        }
+
+        // REGRA DE NEGÓCIO: Verificar se já foi vendido 
+        // Se existir na tabela DetalhesEncomenda, não pode ser apagado.
+        TemVendas = await context.DetalhesEncomenda.AnyAsync(d => d.ProdutoId == Id);
+    }
+
+    private async Task DeleteProduto()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+      
+        bool existeVenda = await context.DetalhesEncomenda.AnyAsync(d => d.ProdutoId == Id);
+        
+        if (existeVenda)
+        {
+           
+            return; 
+        }
+
+        var produtoParaApagar = await context.Produtos.FindAsync(Id);
+        if (produtoParaApagar != null)
+        {
+            context.Produtos.Remove(produtoParaApagar);
+            await context.SaveChangesAsync();
+        }
+        
+        NavigationManager.NavigateTo("/produtos");
+    }
+}

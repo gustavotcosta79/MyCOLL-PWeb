@@ -1,0 +1,129 @@
+﻿@page "/fornecedor/produtos"
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.RCL.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Fornecedor")]
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="bi bi-box-seam me-2"></i>Meus Produtos</h3>
+        <a href="fornecedor/produtos/criar" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Novo Produto
+        </a>
+    </div>
+
+    @if (aCarregar)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (meusProdutos == null || !meusProdutos.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm">
+            <i class="bi bi-info-circle me-2"></i>Ainda não tem produtos à venda. Comece por criar um!
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th style="width: 80px;">Img</th>
+                            <th>Nome</th>
+                            <th>Preço Base</th>
+                            <th>Stock</th>
+                            <th>Estado</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in meusProdutos)
+                        {
+                            <tr>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(p.ImagemUrl))
+                                    {
+                                        <img src="@($"{Api.UrlApi}{p.ImagemUrl}")" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded border bg-light d-flex align-items-center justify-content-center text-muted" style="width: 50px; height: 50px;">
+                                            <i class="bi bi-image"></i>
+                                        </div>
+                                    }
+                                </td>
+                                <td class="fw-bold">@p.Nome</td>
+                                <td>@p.PrecoBase.ToString("C2")</td>
+                                <td>
+                                    @if (p.Stock > 0)
+                                    {
+                                        <span class="text-success">@p.Stock</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger">Esgotado</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (p.Estado == EstadoProduto.Ativo)
+                                    {
+                                        <span class="badge bg-success rounded-pill">Ativo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark rounded-pill">Pendente</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <a href="fornecedor/produtos/editar/@p.Id" class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => Eliminar(p)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Produto>? meusProdutos;
+    private bool aCarregar = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(50); // Segurança para autenticação
+            await CarregarDados();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CarregarDados()
+    {
+        aCarregar = true;
+        meusProdutos = await Api.GetMeusProdutos();
+        aCarregar = false;
+    }
+
+    private async Task Eliminar(Produto p)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", $"Tem a certeza que quer apagar '{p.Nome}'?"))
+        {
+            await Api.EliminarProduto(p.Id);
+            await CarregarDados();
+            StateHasChanged(); // Forçar refresh após eliminar
+        }
+    }
+}

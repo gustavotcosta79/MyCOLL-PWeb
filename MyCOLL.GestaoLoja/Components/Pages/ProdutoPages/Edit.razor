@@ -1,0 +1,215 @@
+﻿@page "/produtos/edit"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.Data
+@using System.IO
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@inject IWebHostEnvironment WebEnvironment
+@inject MyCOLL.RCL.Services.ApiService ApiService
+@inject IConfiguration Configuration
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Editar Produto</PageTitle>
+
+<h1>Editar Produto</h1>
+<hr />
+
+@if (Produto is null)
+{
+    <p><em>A carregar dados...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm method="post" Model="Produto" OnValidSubmit="UpdateProduto" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert" />
+                <input type="hidden" name="Produto.Id" value="@Produto.Id" />
+
+                @* --- DADOS GERAIS --- *@
+                <div class="mb-3">
+                    <label class="form-label">Nome:</label>
+                    <InputText @bind-Value="Produto.Nome" class="form-control" />
+                    <ValidationMessage For="() => Produto.Nome" class="text-danger" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Descrição:</label>
+                    <InputTextArea @bind-Value="Produto.Descricao" class="form-control" />
+                </div>
+
+                @* --- PREÇOS --- *@
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Preço Base (€):</label>
+                        <InputNumber @bind-Value="Produto.PrecoBase" class="form-control" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Margem (%):</label>
+                        <InputNumber @bind-Value="Produto.MargemLucro" class="form-control" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Stock:</label>
+                    <InputNumber @bind-Value="Produto.Stock" class="form-control" />
+                </div>
+
+                @* --- UPLOAD (Lógica Atualizada) --- *@
+                <div class="mb-3">
+                    <label class="form-label">Imagem:</label>
+
+                    @* 1. Imagem que já existe na BD *@
+                    @if (!string.IsNullOrEmpty(Produto.ImagemUrl) && string.IsNullOrEmpty(PrevisaoImagem))
+                    {
+                        <div class="mb-2">
+                            <p class="text-muted small">Imagem Atual:</p>
+                            @* Ajuste para mostrar a imagem vinda da API *@
+                            <img src="@($"{UrlBaseImagens}{Produto.ImagemUrl}")" style="max-width: 150px; border: 1px solid #ccc;" />
+                        </div>
+                    }
+
+                    <InputFile OnChange="CarregarImagem" class="form-control" accept=".jpg,.jpeg,.png" />
+
+                    @* 2. Pré-visualização da NOVA imagem selecionada *@
+                    @if (!string.IsNullOrEmpty(PrevisaoImagem))
+                    {
+                        <div class="mt-2">
+                            <p class="text-muted small">Nova Imagem Selecionada (Pré-visualização):</p>
+                            <img src="@PrevisaoImagem" style="max-width: 200px; border: 1px solid green; padding: 5px;" />
+                        </div>
+                    }
+                </div>
+
+                @* --- DROPDOWNS --- *@
+                <div class="mb-3">
+                    <label class="form-label">Categoria:</label>
+                    <InputSelect @bind-Value="Produto.CategoriaId" class="form-control">
+                        <option value="">-- Selecione --</option>
+                        @foreach (var item in ListaCategorias)
+                        {
+                            <option value="@item.Id">@item.Nome</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Modo:</label>
+                    <InputSelect @bind-Value="Produto.ModoDisponibilizacaoId" class="form-control">
+                        <option value="">-- Selecione --</option>
+                        @foreach (var item in ListaModos)
+                        {
+                            <option value="@item.Id">@item.Nome</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Fornecedor:</label>
+                    <InputSelect @bind-Value="Produto.FornecedorId" class="form-control">
+                        <option value="">-- Selecione --</option>
+                        @foreach (var user in ListaFornecedores)
+                        {
+                            <option value="@user.Id">@(user.Nome ?? user.UserName)</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Estado:</label>
+                    <InputSelect @bind-Value="Produto.Estado" class="form-control">
+                        @foreach (var estado in Enum.GetValues(typeof(EstadoProduto)))
+                        {
+                            <option value="@estado">@estado</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Guardar Alterações</button>
+                <a href="/produtos" class="btn btn-secondary">Cancelar</a>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery] private int Id { get; set; }
+    [SupplyParameterFromForm] private Produto? Produto { get; set; }
+
+    // Listas e Upload
+    private List<Categoria> ListaCategorias = new();
+    private List<ModoDisponibilizacao> ListaModos = new();
+    private List<ApplicationUser> ListaFornecedores = new();
+
+    private IBrowserFile? novaImagemSelecionada;
+    private string? PrevisaoImagem;
+    private long maxFileSize = 1024 * 1024 * 5; // 5 MB
+
+    // Tenta ler do appsettings, se não existir usa o localhost default da API
+    private string UrlBaseImagens => Configuration["UrlImagens"] ?? "https://localhost:7242";
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        ListaCategorias = await context.Categorias.ToListAsync();
+        ListaModos = await context.ModosDisponibilizacao.ToListAsync();
+        ListaFornecedores = await context.Users.Where(u => u.Tipo == TipoUtilizador.Fornecedor).ToListAsync();
+
+        // Se Produto já veio do Form (ex: erro validação), não carrega da BD
+        if (Produto is null)
+        {
+            Produto = await context.Produtos.FirstOrDefaultAsync(m => m.Id == Id);
+        }
+
+        if (Produto is null) NavigationManager.NavigateTo("notfound");
+    }
+
+    private async Task CarregarImagem(InputFileChangeEventArgs e)
+    {
+        novaImagemSelecionada = e.File;
+        // Gerar pré-visualização apenas para o browser
+        var buffer = new byte[novaImagemSelecionada.Size];
+        await novaImagemSelecionada.OpenReadStream(maxFileSize).ReadAsync(buffer);
+        PrevisaoImagem = $"data:image/png;base64,{Convert.ToBase64String(buffer)}";
+    }
+
+    private async Task UpdateProduto()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        if (Produto != null)
+        {
+            if (novaImagemSelecionada != null)
+            {
+                var nomeFicheiro = $"{Guid.NewGuid()}{Path.GetExtension(novaImagemSelecionada.Name)}";
+
+                // Caminho físico para a pasta da API vizinha
+                var pathAPI = Path.Combine(Directory.GetCurrentDirectory(), "..", "MyCOLL.API", "wwwroot", "imagens");
+
+                // Garantir que a pasta existe
+                if (!Directory.Exists(pathAPI)) Directory.CreateDirectory(pathAPI);
+
+                var pathCompleto = Path.Combine(pathAPI, nomeFicheiro);
+
+                // Gravar ficheiro fisicamente
+                await using var stream = new FileStream(pathCompleto, FileMode.Create);
+                await novaImagemSelecionada.OpenReadStream(maxFileSize).CopyToAsync(stream);
+
+                // Atualizar o caminho relativo na BD
+                Produto.ImagemUrl = $"/imagens/{nomeFicheiro}";
+            }
+
+            Produto.PrecoVenda = Produto.PrecoBase + (Produto.PrecoBase * (Produto.MargemLucro / 100));
+
+            // 3. Atualizar na BD
+            context.Attach(Produto).State = EntityState.Modified;
+            await context.SaveChangesAsync();
+        }
+
+        NavigationManager.NavigateTo("/produtos");
+    }
+}

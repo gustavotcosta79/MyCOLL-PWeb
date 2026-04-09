@@ -1,0 +1,144 @@
+﻿@page "/encomendas/meuspedidos"
+@using Microsoft.AspNetCore.Authorization
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.RCL.Services
+@using Microsoft.Extensions.Configuration
+@attribute [Authorize(Roles = "Cliente")]
+@inject ApiService Api
+@inject IConfiguration Configuration
+
+<PageTitle>As Minhas Encomendas</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <h2 class="mb-4 fw-bold text-primary"><i class="bi bi-clock-history me-2"></i>Histórico de Encomendas</h2>
+
+    @if (aCarregar)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2 text-muted">A carregar o histórico...</p>
+        </div>
+    }
+    else if (Encomendas == null || !Encomendas.Any())
+    {
+        <div class="alert alert-info text-center py-5 shadow-sm">
+            <i class="bi bi-bag-x fs-1 d-block mb-3"></i>
+            <h4>Ainda não efetuou nenhuma compra.</h4>
+            <p>Quando comprar os seus primeiros colecionáveis, eles aparecerão aqui.</p>
+            <a href="/" class="btn btn-primary mt-3">Começar a comprar</a>
+        </div>
+    }
+    else
+    {
+        <div class="accordion shadow-sm" id="accordionEncomendas">
+            @foreach (var enc in Encomendas)
+            {
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapse-@enc.Id">
+                            <div class="d-flex justify-content-between w-100 me-3 align-items-center">
+                                <div>
+                                    <span class="fw-bold">Encomenda #@enc.Id</span>
+                                    <span class="text-muted small ms-2 d-none d-sm-inline">
+                                        @enc.DataEncomenda.ToString("dd/MM/yyyy HH:mm")
+                                    </span>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="fw-bold text-dark">@enc.ValorTotal.ToString("C2")</span>
+                                    @RenderBadge(enc.Estado)
+                                </div>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="collapse-@enc.Id" class="accordion-collapse collapse" data-bs-parent="#accordionEncomendas">
+                        <div class="accordion-body bg-light">
+
+                            @* Detalhes dos Produtos *@
+                            <div class="table-responsive bg-white rounded border p-2">
+                                <table class="table table-sm table-borderless mb-0 align-middle">
+                                    <thead class="text-muted border-bottom">
+                                        <tr>
+                                            <th>Produto</th>
+                                            <th class="text-center">Qtd</th>
+                                            <th class="text-end">Preço</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if (enc.Detalhes != null)
+                                        {
+                                            @foreach (var item in enc.Detalhes)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            @if (!string.IsNullOrEmpty(item.Produto?.ImagemUrl))
+                                                            {
+                                                                @* CORREÇÃO AQUI: Usa Api.UrlApi para funcionar no Android *@
+                                                                <img src="@($"{Api.UrlApi}{item.Produto.ImagemUrl}")"
+                                                                     class="rounded me-2 border" style="width: 30px; height: 30px; object-fit: cover;">
+                                                            }
+                                                            <span class="small fw-bold">@(item.Produto?.Nome ?? "Produto Removido")</span>
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-center small">x @item.Quantidade</td>
+                                                    <td class="text-end small">@item.PrecoUnitario.ToString("C2")</td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="mt-3 text-end">
+                                <span class="text-muted small">Data do Pedido: @enc.DataEncomenda.ToLongDateString()</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Encomenda>? Encomendas;
+    private bool aCarregar = true; // Controla o spinner inicial
+
+    // Não precisamos mais disto aqui, usamos Api.UrlApi
+    // private string UrlApi => Configuration["UrlImagens"] ?? "https://localhost:7242";
+
+    // MUDANÇA: Usar OnAfterRenderAsync para garantir o token no Android
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Pequeno delay para garantir que o AuthProvider leu o token no Android
+            await Task.Delay(50);
+
+            Encomendas = await Api.GetMinhasEncomendas();
+            aCarregar = false;
+
+            StateHasChanged(); // OBRIGATÓRIO: Atualiza o ecrã
+        }
+    }
+
+    private RenderFragment RenderBadge(EstadoEncomenda estado) => builder =>
+    {
+        string cor = estado switch
+        {
+            EstadoEncomenda.Pendente => "bg-warning text-dark",
+            EstadoEncomenda.Paga => "bg-info text-dark",
+            EstadoEncomenda.Enviada => "bg-primary",
+            EstadoEncomenda.Entregue => "bg-success",
+            EstadoEncomenda.Cancelada => "bg-danger",
+            _ => "bg-secondary"
+        };
+
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", $"badge rounded-pill {cor}");
+        builder.AddContent(2, estado.ToString());
+        builder.CloseElement();
+    };
+}

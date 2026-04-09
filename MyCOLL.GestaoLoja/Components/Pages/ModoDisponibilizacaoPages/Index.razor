@@ -1,0 +1,46 @@
+﻿@page "/mododisponibilizacaos"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using MyCOLL.Shared
+@using MyCOLL.Data
+@implements IAsyncDisposable
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Modos de Disponibilização</PageTitle>
+
+<h1>Modos de Disponibilização</h1>
+
+<p>
+    <a href="mododisponibilizacaos/create" class="btn btn-success">Create New</a>
+</p>
+
+<QuickGrid Class="table" Items="context.ModosDisponibilizacao">
+    <PropertyColumn Property="mododisponibilizacao => mododisponibilizacao.Nome" />
+    <PropertyColumn Property="mododisponibilizacao => mododisponibilizacao.Detalhe" />
+    <PropertyColumn Property="mododisponibilizacao => mododisponibilizacao.Ativo" />
+
+    <TemplateColumn Context="mododisponibilizacao">
+        <a href="@($"mododisponibilizacaos/edit?id={mododisponibilizacao.Id}")" class="btn btn-warning btn-sm" title="Editar">
+            <i class="bi bi-pencil"></i>           
+        </a> 
+        <a href="@($"mododisponibilizacaos/details?id={mododisponibilizacao.Id}")" class="btn btn-info btn-sm" title="Detalhes">
+               <i class="bi bi-eye"></i>
+        </a>
+        <a href="@($"mododisponibilizacaos/delete?id={mododisponibilizacao.Id}")" class="btn btn-danger btn-sm" title="Apagar">
+            <i class="bi bi-trash"></i>          
+        </a>
+    </TemplateColumn>
+</QuickGrid>
+
+@code {
+    private ApplicationDbContext context = default!;
+
+    protected override void OnInitialized() 
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

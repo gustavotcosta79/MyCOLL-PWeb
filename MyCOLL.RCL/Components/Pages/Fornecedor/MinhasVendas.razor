@@ -1,0 +1,230 @@
+﻿@page "/fornecedor/vendas"
+@using MyCOLL.Shared
+@using MyCOLL.RCL.Services
+@using Microsoft.AspNetCore.Authorization
+@using MyCOLL.Shared.Enums
+@attribute [Authorize(Roles = "Fornecedor")]
+@inject ApiService Api
+
+<PageTitle>As minhas vendas</PageTitle>
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="bi bi-graph-up-arrow me-2"></i>Minhas Vendas</h3>
+
+        @if (!aCarregar && Vendas.Any())
+        {
+            <div class="card bg-success text-white shadow-sm" style="min-width: 200px;">
+                <div class="card-body py-2 px-3 text-center">
+                    <small class="d-block opacity-75">Total Faturado</small>
+                    <span class="fs-4 fw-bold">@TotalFaturado.ToString("C")</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (aCarregar)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">A carregar o seu histórico...</p>
+        </div>
+    }
+    else if (!Vendas.Any())
+    {
+        <div class="alert alert-info d-flex align-items-center">
+            <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+            <div>
+                <strong>Ainda não tem vendas registadas.</strong>
+                <br />
+                Assim que os clientes comprarem os seus produtos, eles aparecerão aqui.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Produto</th>
+                            <th class="text-center">Qtd</th>
+                            <th>Valor</th>
+                            <th>Estado</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var venda in Vendas)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="fw-bold">@venda.Encomenda?.DataEncomenda.ToShortDateString()</span>
+                                    <div class="small text-muted">@venda.Encomenda?.DataEncomenda.ToShortTimeString()</div>
+                                </td>
+
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        @if (!string.IsNullOrEmpty(venda.Produto?.ImagemUrl))
+                                        {
+                                            <img src="@($"{Api.UrlApi}{venda.Produto.ImagemUrl}")"
+                                                 class="rounded me-2 border"
+                                                 style="width: 45px; height: 45px; object-fit: cover;"
+                                                 alt="@venda.Produto.Nome" />
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-secondary rounded me-2 d-flex align-items-center justify-content-center text-white"
+                                                 style="width: 45px; height: 45px;">
+                                                <i class="bi bi-image"></i>
+                                            </div>
+                                        }
+                                        <div>
+                                            <span class="d-block fw-bold text-truncate" style="max-width: 200px;">
+                                                @venda.Produto?.Nome
+                                            </span>
+                                            <small class="text-muted">Ref: #@venda.ProdutoId</small>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border">@venda.Quantidade x</span>
+                                </td>
+
+                                <td class="fw-bold text-success">
+                                    @((venda.PrecoUnitario * venda.Quantidade).ToString("C"))
+                                </td>
+
+                                <td>
+                                    @switch (venda.Encomenda?.Estado)
+                                    {
+                                        case EstadoEncomenda.Pendente:
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pendente</span>
+                                            break;
+                                        case EstadoEncomenda.Paga:
+                                            <span class="badge bg-info text-dark"><i class="bi bi-cash-coin"></i> Paga</span>
+                                            break;
+                                        case EstadoEncomenda.Enviada:
+                                            <span class="badge bg-primary"><i class="bi bi-truck"></i> Enviada</span>
+                                            break;
+                                        case EstadoEncomenda.Entregue:
+                                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Entregue</span>
+                                            break;
+                                        case EstadoEncomenda.Cancelada:
+                                            <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Cancelada</span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-secondary">Desconhecido</span>
+                                            break;
+                                    }
+                                </td>
+
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => AbrirDetalhes(venda)">
+                                        <i class="bi bi-eye"></i> Detalhes
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@if (vendaSelecionada != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">
+                        Detalhes da Venda <span class="text-muted fs-6">#@vendaSelecionada.EncomendaId</span>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="FecharDetalhes"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        @if (!string.IsNullOrEmpty(vendaSelecionada.Produto?.ImagemUrl))
+                        {
+                            <img src="@($"{Api.UrlApi}{vendaSelecionada.Produto.ImagemUrl}")" class="img-fluid rounded border" style="max-height: 150px;" />
+                        }
+                        <h5 class="mt-2">@vendaSelecionada.Produto?.Nome</h5>
+                    </div>
+
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Data da Encomenda:</span>
+                            <strong>@vendaSelecionada.Encomenda?.DataEncomenda.ToString("g")</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Cliente ID:</span>
+                            <span class="text-truncate" style="max-width: 150px;">
+                                @(vendaSelecionada.Encomenda?.ClienteId ?? "N/A")
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Preço Unitário:</span>
+                            <span>@vendaSelecionada.PrecoUnitario.ToString("C")</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Quantidade:</span>
+                            <span>@vendaSelecionada.Quantidade Un.</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between bg-light">
+                            <span class="fw-bold">Total Recebido:</span>
+                            <span class="fw-bold text-success">@((vendaSelecionada.PrecoUnitario * vendaSelecionada.Quantidade).ToString("C"))</span>
+                        </li>
+                    </ul>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="FecharDetalhes">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Lista para guardar as vendas vindas da API
+    private List<DetalheEncomenda> Vendas = new();
+
+    // Variáveis de estado
+    private bool aCarregar = true;
+    private DetalheEncomenda? vendaSelecionada = null;
+
+    // Propriedade calculada para o Total
+    private decimal TotalFaturado => Vendas.Sum(v => v.PrecoUnitario * v.Quantidade);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Carrega as vendas usando o método que criámos no ApiService
+            Vendas = await Api.GetMinhasVendas();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao carregar vendas: {ex.Message}");
+        }
+        finally
+        {
+            aCarregar = false;
+        }
+    }
+
+    // Métodos para abrir/fechar o Modal
+    private void AbrirDetalhes(DetalheEncomenda venda)
+    {
+        vendaSelecionada = venda;
+    }
+
+    private void FecharDetalhes()
+    {
+        vendaSelecionada = null;
+    }
+}

@@ -1,0 +1,224 @@
+﻿@page "/fornecedor/produtos/criar"
+@page "/fornecedor/produtos/editar/{Id:int}"
+@using MyCOLL.Shared
+@using MyCOLL.RCL.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Fornecedor")]
+@inject ApiService Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<div class="container mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow border-0">
+                <div class="card-header bg-white py-3">
+                    <h4 class="mb-0 fw-bold text-primary">
+                        @(Id == 0 ? "Novo Produto" : "Editar Produto")
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+
+                    @if (aCarregar)
+                    {
+                        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+                    }
+                    else
+                    {
+                        <EditForm Model="Produto" OnValidSubmit="Gravar">
+                            <DataAnnotationsValidator />
+
+                            <div class="row g-3">
+                                @* Nome *@
+                                <div class="col-md-12">
+                                    <label class="form-label fw-bold">Nome do Produto</label>
+                                    <InputText class="form-control" @bind-Value="Produto.Nome" placeholder="Ex: Moeda 2 Euros Comemorativa" />
+                                    <ValidationMessage For="@(() => Produto.Nome)" />
+                                </div>
+
+                                @* Categoria *@
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Categoria</label>
+                                    <InputSelect class="form-select" @bind-Value="Produto.CategoriaId">
+                                        <option value="0">Selecione...</option>
+                                        @foreach (var cat in Categorias)
+                                        {
+                                            <option value="@cat.Id">@cat.Nome</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+
+                                @* Imagem Upload *@
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Imagem</label>
+                                    <InputFile OnChange="CarregarImagem" class="form-control" />
+                                </div>
+
+                                @* Previsão da Imagem *@
+                                @if (!string.IsNullOrEmpty(Produto.ImagemUrl))
+                                {
+                                    <div class="col-12 text-center my-3">
+                                        <img src="@($"{Api.UrlApi}{Produto.ImagemUrl}")" class="img-thumbnail rounded" style="max-height: 150px;" />
+                                    </div>
+                                }
+
+                                @* Preço Base *@
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Preço Base (€)</label>
+                                    <InputNumber class="form-control" @bind-Value="Produto.PrecoBase" />
+                                    <div class="form-text">O preço final será calculado pelo administrador.</div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Modo de Disponibilização</label>
+                                    <InputSelect class="form-select" @bind-Value="Produto.ModoDisponibilizacaoId">
+                                        <option value="0">-- Selecione o Modo --</option>
+
+                                        <option value="1">Venda</option>
+                                        <option value="2">Listagem</option>
+                                        <option value="3">Leilão</option>
+
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => Produto.ModoDisponibilizacaoId)" />
+                                </div>
+
+                                @* Stock *@
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Stock Inicial</label>
+                                    <InputNumber class="form-control" @bind-Value="Produto.Stock" />
+                                </div>
+
+                                @* Descrição *@
+                                <div class="col-12">
+                                    <label class="form-label fw-bold">Descrição Detalhada</label>
+                                    <InputTextArea class="form-control" @bind-Value="Produto.Descricao" rows="4" />
+                                </div>
+
+                                @* Aviso de Pendente *@
+                                <div class="col-12 mt-3">
+                                    <div class="alert alert-warning d-flex align-items-center">
+                                        <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+                                        <div>
+                                            <strong>Nota:</strong> Ao gravar, este produto ficará em estado <u>Pendente</u> até ser aprovado pela administração.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @* Botões *@
+                                <div class="col-12 d-flex justify-content-between mt-4">
+                                    <a href="fornecedor/produtos" class="btn btn-outline-secondary px-4">Cancelar</a>
+                                    <button type="submit" class="btn btn-primary px-5 fw-bold" disabled="@processando">
+                                        @if (processando)
+                                        {
+                                            <span>Gravando...</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span><i class="bi bi-save me-2"></i> Gravar Produto</span>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private Produto Produto { get; set; } = new();
+    private List<Categoria> Categorias = new();
+
+    private bool aCarregar = true;
+    private bool processando = false;
+
+    // MUDANÇA: Usar OnAfterRenderAsync
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(50); // Segurança
+
+            // Carrega Categorias (públicas)
+            Categorias = await Api.GetCategorias();
+
+            // Se for edição, carrega dados do produto (privado)
+            if (Id != 0)
+            {
+                var p = await Api.GetProdutoDetalhe(Id);
+                if (p != null) Produto = p;
+            }
+
+            aCarregar = false;
+            StateHasChanged(); // Mostra o formulário
+        }
+    }
+
+    private async Task CarregarImagem(InputFileChangeEventArgs e)
+    {
+        var url = await Api.UploadImagemAsync(e.File);
+        if (url != null)
+        {
+            Produto.ImagemUrl = url;
+            StateHasChanged(); // Atualiza a preview da imagem
+        }
+    }
+
+    private async Task Gravar()
+    {
+        // --- VALIDAÇÕES OBRIGATÓRIAS ---
+
+        // 1. Validar se escolheu Categoria
+        if (Produto.CategoriaId <= 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Selecione uma categoria!");
+            return;
+        }
+
+        if (Produto.ModoDisponibilizacaoId <= 0)
+        {
+            await JS.InvokeVoidAsync("alert","ERRO: Tens de selecionar Venda, Listagem ou Leilão!");
+            return;
+        }
+
+        processando = true; // Bloqueia o botão e muda o texto para "Gravando..."
+        StateHasChanged();  // Força a UI a atualizar imediatamente
+
+        bool sucesso;
+
+        try
+        {
+            // CHAMADA À API ---
+            if (Id == 0)
+            {
+                // Novo Produto
+                sucesso = await Api.CriarProduto(Produto);
+            }
+            else
+            {
+                // Editar Produto Existente
+                sucesso = await Api.EditarProduto(Id, Produto);
+            }
+
+            if (sucesso)
+            {
+                await JS.InvokeVoidAsync("alert","SUCESSO: Produto guardado.");
+                Nav.NavigateTo("fornecedor/produtos");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "ERRO API: O servidor rejeitou o pedido.");
+                processando = false; 
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERRO CRÍTICO (Exceção): {ex.Message}");
+            processando = false;
+        }
+    }
+}

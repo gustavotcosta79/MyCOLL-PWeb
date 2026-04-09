@@ -1,0 +1,188 @@
+﻿@page "/registar"
+@using MyCOLL.Shared.DTOs
+@using MyCOLL.Shared.Enums
+@using MyCOLL.RCL.Services
+@using Microsoft.AspNetCore.Components.Web
+
+@rendermode RenderMode.InteractiveAuto
+
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg border-0 rounded-3">
+                <div class="card-body p-5">
+
+                    <div class="text-center mb-4">
+                        <h2 class="fw-bold text-primary">Criar Conta</h2>
+                        <p class="text-muted">Preencha os seus dados pessoais</p>
+                    </div>
+
+                    <EditForm Model="RegistoModel" OnValidSubmit="HandleRegisto" OnInvalidSubmit="HandleInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="alert alert-danger shadow-sm" />
+
+                        @* SELEÇÃO DE TIPO DE CONTA *@
+                        <div class="mb-4">
+                            <label class="form-label fw-bold mb-2">Quero registar-me como:</label>
+                            <div class="d-flex gap-3">
+                                <div class="card-radio flex-fill p-3 border rounded text-center @(RegistoModel.Tipo == TipoUtilizador.Cliente ? "selected-type" : "")"
+                                     @onclick="() => RegistoModel.Tipo = TipoUtilizador.Cliente">
+                                    <i class="bi bi-person-heart fs-2 d-block mb-1 text-primary"></i>
+                                    <span class="fw-bold d-block">Cliente</span>
+                                </div>
+                                <div class="card-radio flex-fill p-3 border rounded text-center @(RegistoModel.Tipo == TipoUtilizador.Fornecedor ? "selected-type" : "")"
+                                     @onclick="() => RegistoModel.Tipo = TipoUtilizador.Fornecedor">
+                                    <i class="bi bi-shop-window fs-2 d-block mb-1 text-success"></i>
+                                    <span class="fw-bold d-block">Fornecedor</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @* --- NOVOS CAMPOS OBRIGATÓRIOS --- *@
+
+                        @* Nome *@
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nome Completo</label>
+                            <InputText @bind-Value="RegistoModel.Nome" class="form-control" placeholder="O seu nome" />
+                            <ValidationMessage For="@(() => RegistoModel.Nome)" />
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            @* NIF *@
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">NIF</label>
+                                <InputText @bind-Value="RegistoModel.NIF" class="form-control" placeholder="999999999" />
+                                <ValidationMessage For="@(() => RegistoModel.NIF)" />
+                            </div>
+                            @* Email *@
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Email</label>
+                                <InputText @bind-Value="RegistoModel.Email" class="form-control" placeholder="email@exemplo.com" />
+                                <ValidationMessage For="@(() => RegistoModel.Email)" />
+                            </div>
+                        </div>
+
+                        @* Morada *@
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Morada</label>
+                            <InputText @bind-Value="RegistoModel.Morada" class="form-control" placeholder="Rua, Código Postal, Cidade" />
+                            <ValidationMessage For="@(() => RegistoModel.Morada)" />
+                        </div>
+
+                        @* Passwords *@
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Password</label>
+                                <InputText @bind-Value="RegistoModel.Password" type="password" class="form-control" />
+                                <ValidationMessage For="@(() => RegistoModel.Password)" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Confirmar</label>
+                                <InputText @bind-Value="RegistoModel.ConfirmPassword" type="password" class="form-control" />
+                                <ValidationMessage For="@(() => RegistoModel.ConfirmPassword)" />
+                            </div>
+                        </div>
+
+                        @* Aviso Fornecedor *@
+                        @if (RegistoModel.Tipo == TipoUtilizador.Fornecedor)
+                        {
+                            <div class="alert alert-warning d-flex align-items-center mb-3 small">
+                                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                                <div>A sua conta ficará <strong>Pendente</strong> até aprovação.</div>
+                            </div>
+                        }
+
+                        @* Botão *@
+                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" disabled="@processando">
+                            @if (processando)
+                            {
+                                <span>A criar conta...</span>
+                            }
+                            else
+                            {
+
+                                <span>Registar</span>
+                            }
+                        </button>
+
+                        @* Erro API *@
+                        @if (!string.IsNullOrEmpty(mensagemErro))
+                        {
+                            <div class="alert alert-danger mt-3 mb-0 text-center">
+                                @mensagemErro
+                            </div>
+                        }
+                    </EditForm>
+
+                    <div class="text-center mt-4">
+                        <span class="text-muted">Já tem conta?</span> <a href="login" class="fw-bold text-decoration-none">Entrar</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card-radio {
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid #dee2e6;
+        background-color: #f8f9fa;
+    }
+
+        .card-radio:hover {
+            transform: translateY(-3px);
+            border-color: #adb5bd;
+        }
+
+    .selected-type {
+        border-color: #0d6efd !important;
+        background-color: #e7f1ff !important;
+        color: #0d6efd;
+    }
+</style>
+
+@code {
+    private RegistoDto RegistoModel = new();
+    private string? mensagemErro;
+    private bool processando = false;
+
+    private void HandleInvalidSubmit()
+    {
+        mensagemErro = "Por favor, preencha todos os campos obrigatórios (Nome, NIF, Morada).";
+    }
+
+    private async Task HandleRegisto()
+    {
+        processando = true;
+        mensagemErro = null;
+
+        try
+        {
+            // Agora retorna string com erro ou null se sucesso
+            var erroApi = await Api.Registar(RegistoModel);
+
+            if (erroApi == null)
+            {
+                Nav.NavigateTo("/login?registado=true");
+            }
+            else
+            {
+                // Mostra o erro exato (ex: "Password too short" ou "User already exists")
+                mensagemErro = $"Erro: {erroApi}";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = "Erro de ligação ao servidor.";
+        }
+        finally
+        {
+            processando = false;
+        }
+    }
+}

@@ -1,0 +1,65 @@
+﻿@page "/encomendas"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.Data
+@implements IAsyncDisposable
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Gestão de Encomendas</PageTitle>
+
+<h1>Gestão de Encomendas</h1>
+
+<QuickGrid Class="table table-striped" Items="context.Encomendas" Pagination="pagination">
+
+    <PropertyColumn Property="encomenda => encomenda.Id" Title="#" Sortable="true" />
+
+    <PropertyColumn Property="encomenda => encomenda.DataEncomenda" Title="Data" Format="dd/MM/yyyy" Sortable="true" />
+
+    <PropertyColumn Property="encomenda => encomenda.ValorTotal" Title="Total" Format="C2" Sortable="true" />
+
+    <TemplateColumn Title="Estado" Sortable="true">
+        <span class="badge @GetBadgeClass(context.Estado)">
+            @context.Estado
+        </span>
+    </TemplateColumn>
+
+    <PropertyColumn Property="encomenda => encomenda.ClienteId" Title="Cliente ID" />
+
+    <TemplateColumn Context="encomenda" Title="Ações">
+        <a href="@($"/encomendas/details?id={encomenda.Id}")" class="btn btn-info btn-sm text-white" title="Detalhes">
+            <i class="bi bi-eye"></i> 
+        </a>
+    </TemplateColumn>
+
+</QuickGrid>
+
+<Paginator State="pagination" />
+
+@code {
+    private ApplicationDbContext context = default!;
+    private PaginationState pagination = new PaginationState { ItemsPerPage = 10 };
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    // Método que escolhe a cor com base no estado
+    private string GetBadgeClass(EstadoEncomenda estado)
+    {
+        return estado switch
+        {
+            EstadoEncomenda.Pendente => "bg-warning text-dark", // Amarelo
+            EstadoEncomenda.Paga => "bg-info text-dark",        // Azul Claro
+            EstadoEncomenda.Enviada => "bg-success",            // Verde
+            EstadoEncomenda.Cancelada => "bg-danger",           // Vermelho
+            _ => "bg-secondary"                                 // Cinzento (default)
+        };
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

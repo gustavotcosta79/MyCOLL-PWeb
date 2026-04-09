@@ -1,0 +1,191 @@
+﻿@page "/produtos/create"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.Data
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@inject MyCOLL.RCL.Services.ApiService ApiService
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Criar Produto</PageTitle>
+
+<h1>Criar Novo Produto</h1>
+<hr />
+
+<div class="row">
+    <div class="col-md-6">
+        <EditForm method="post" Model="Produto" OnValidSubmit="AddProduto" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+
+            @* --- DADOS GERAIS --- *@
+            <div class="mb-3">
+                <label for="nome" class="form-label">Nome:</label>
+                <InputText id="nome" @bind-Value="Produto.Nome" class="form-control" />
+                <ValidationMessage For="() => Produto.Nome" class="text-danger" />
+            </div>
+
+            <div class="mb-3">
+                <label for="descricao" class="form-label">Descrição:</label>
+                <InputTextArea id="descricao" @bind-Value="Produto.Descricao" class="form-control" />
+                <ValidationMessage For="() => Produto.Descricao" class="text-danger" />
+            </div>
+
+            @* --- PREÇOS E STOCK --- *@
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="precobase" class="form-label">Preço Base (€):</label>
+                    <InputNumber id="precobase" @bind-Value="Produto.PrecoBase" class="form-control" />
+                    <ValidationMessage For="() => Produto.PrecoBase" class="text-danger" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="margemlucro" class="form-label">Margem de Lucro (%):</label>
+                    <InputNumber id="margemlucro" @bind-Value="Produto.MargemLucro" class="form-control" />
+                    <ValidationMessage For="() => Produto.MargemLucro" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="stock" class="form-label">Stock:</label>
+                <InputNumber id="stock" @bind-Value="Produto.Stock" class="form-control" />
+                <ValidationMessage For="() => Produto.Stock" class="text-danger" />
+            </div>
+
+            @* --- UPLOAD DE IMAGEM --- *@
+            <div class="mb-3">
+                <label class="form-label">Imagem do Produto:</label>
+                <InputFile OnChange="CarregarImagem" class="form-control" accept=".jpg,.jpeg,.png" />
+
+                @if (!string.IsNullOrEmpty(PrevisaoImagem))
+                {
+                    <div class="mt-2">
+                        <img src="@PrevisaoImagem" alt="Pré-visualização" style="max-width: 200px; border: 1px solid #ccc; padding: 5px;" />
+                    </div>
+                }
+                @* Campo escondido para garantir que o URL gerado vai no modelo *@
+                <InputText @bind-Value="Produto.ImagemUrl" hidden />
+            </div>
+
+            @* --- DROPDOWNS --- *@
+            <div class="mb-3">
+                <label for="categoriaid" class="form-label">Categoria:</label>
+                <InputSelect id="categoriaid" @bind-Value="Produto.CategoriaId" class="form-control">
+                    <option value="">-- Selecione uma Categoria --</option>
+                    @foreach (var item in ListaCategorias)
+                    {
+                        <option value="@item.Id">@item.Nome</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Produto.CategoriaId" class="text-danger" />
+            </div>
+
+            <div class="mb-3">
+                <label for="mododisponibilizacaoid" class="form-label">Modo Disponibilização:</label>
+                <InputSelect id="mododisponibilizacaoid" @bind-Value="Produto.ModoDisponibilizacaoId" class="form-control">
+                    <option value="">-- Selecione um Modo --</option>
+                    @foreach (var item in ListaModos)
+                    {
+                        <option value="@item.Id">@item.Nome</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Produto.ModoDisponibilizacaoId" class="text-danger" />
+            </div>
+
+            <div class="mb-3">
+                <label for="fornecedorid" class="form-label">Fornecedor (Proprietário):</label>
+                <InputSelect id="fornecedorid" @bind-Value="Produto.FornecedorId" class="form-control">
+                    <option value="">-- Selecione um Fornecedor --</option>
+                    @foreach (var user in ListaFornecedores)
+                    {
+                        <option value="@user.Id">@(string.IsNullOrEmpty(user.Nome) ? user.UserName : user.Nome)</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Produto.FornecedorId" class="text-danger" />
+            </div>
+
+            <div class="mb-3">
+                <label for="estado" class="form-label">Estado do Registo:</label>
+                <InputSelect id="estado" @bind-Value="Produto.Estado" class="form-control">
+                    @foreach (var estado in Enum.GetValues(typeof(EstadoProduto)))
+                    {
+                        <option value="@estado">@estado</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Produto.Estado" class="text-danger" />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Criar Produto</button>
+            <a href="/produtos" class="btn btn-secondary">Cancelar</a>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Produto Produto { get; set; } = new();
+
+    // Listas auxiliares
+    private List<Categoria> ListaCategorias = new();
+    private List<ModoDisponibilizacao> ListaModos = new();
+    private List<ApplicationUser> ListaFornecedores = new();
+
+    // Variáveis para o Upload
+    private IBrowserFile? imagemSelecionada;
+    private string? PrevisaoImagem;
+    private long maxFileSize = 1024 * 1024 * 5; // 5 MB
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        ListaCategorias = await context.Categorias.ToListAsync();
+        ListaModos = await context.ModosDisponibilizacao.ToListAsync();
+        ListaFornecedores = await context.Users
+            .Where(u => u.Tipo == TipoUtilizador.Fornecedor)
+            .ToListAsync();
+    }
+
+ 
+    private async Task CarregarImagem(InputFileChangeEventArgs e)
+    {
+        imagemSelecionada = e.File;
+        // Gerar pré-visualização (Data URL) para o utilizador ver a imagem logo
+        // Nota: Isto carrega a imagem em memória do browser apenas para mostrar, não faz upload ainda
+        var buffer = new byte[imagemSelecionada.Size];
+        await imagemSelecionada.OpenReadStream(maxFileSize).ReadAsync(buffer);
+        PrevisaoImagem = $"data:image/png;base64,{Convert.ToBase64String(buffer)}";
+    }
+
+    private async Task AddProduto()
+    {
+        if (imagemSelecionada != null)
+        {
+            var nomeFicheiro = $"{Guid.NewGuid()}{Path.GetExtension(imagemSelecionada.Name)}";
+
+            var pathAPI = Path.Combine(Directory.GetCurrentDirectory(), "..", "MyCOLL.API", "wwwroot", "imagens");
+
+            // Garantir que a pasta existe (no disco)
+            if (!Directory.Exists(pathAPI)) Directory.CreateDirectory(pathAPI);
+
+            var pathCompleto = Path.Combine(pathAPI, nomeFicheiro);
+
+            // Guardar o ficheiro fisicamente na pasta da API
+            await using var stream = new FileStream(pathCompleto, FileMode.Create);
+            await imagemSelecionada.OpenReadStream(maxFileSize).CopyToAsync(stream);
+
+            // Na BD guardamos apenas o caminho relativo (igual para todos)
+            Produto.ImagemUrl = $"/imagens/{nomeFicheiro}";
+        }
+
+        // 2. Gravar o Produto na BD (Gestão Loja tem acesso direto à BD)
+        using var context = DbFactory.CreateDbContext();
+
+        Produto.PrecoVenda = Produto.PrecoBase + (Produto.PrecoBase * (Produto.MargemLucro / 100));
+
+        context.Produtos.Add(Produto);
+        await context.SaveChangesAsync();
+
+        NavigationManager.NavigateTo("/produtos");
+    }
+}

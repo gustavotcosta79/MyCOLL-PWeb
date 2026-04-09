@@ -1,0 +1,134 @@
+﻿@page "/categorias/edit"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Data
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Editar Categoria</PageTitle>
+
+<h1>Editar Categoria</h1>
+<hr />
+
+@if (Categoria is null)
+{
+    <p><em>A carregar dados...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm method="post" Model="Categoria" OnValidSubmit="UpdateCategoria" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert" />
+
+                <input type="hidden" name="Categoria.Id" value="@Categoria.Id" />
+
+                @* Campo Nome *@
+                <div class="mb-3">
+                    <label for="nome" class="form-label">Nome:</label>
+                    <InputText id="nome" @bind-Value="Categoria.Nome" class="form-control" />
+                    <ValidationMessage For="() => Categoria.Nome" class="text-danger" />
+                </div>
+
+                @* Dropdown Categoria Pai *@
+                <div class="mb-3">
+                    <label for="categoriapai" class="form-label">Categoria Pai:</label>
+                    <InputSelect id="categoriapai" @bind-Value="Categoria.CategoriaPaiId" class="form-control">
+                        <option value="">-- Nenhuma (É uma Categoria Raiz) --</option>
+                        @foreach (var cat in ListaCategorias)
+                        {
+                            <option value="@cat.Id">@cat.Nome</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => Categoria.CategoriaPaiId" class="text-danger" />
+                </div>
+
+                @* Campo Nível *@
+                <div class="mb-3">
+                    <label for="nivel" class="form-label">Nível:</label>
+                    <InputNumber id="nivel" @bind-Value="Categoria.Nivel" class="form-control" />
+                    <ValidationMessage For="() => Categoria.Nivel" class="text-danger" />
+                </div>
+
+                @* Checkbox Ativa *@
+                <div class="mb-3 form-check">
+                    <label class="form-check-label">
+                        <InputCheckbox @bind-Value="Categoria.Ativa" class="form-check-input" />
+                        Categoria Ativa
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Guardar Alterações</button>
+                <a href="/categorias" class="btn btn-secondary">Cancelar</a>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/categorias">Voltar à Lista</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private Categoria? Categoria { get; set; }
+
+    private List<Categoria> ListaCategorias = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        // 1. Carregar a categoria que estamos a editar
+        Categoria ??= await context.Categorias.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (Categoria is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+            return;
+        }
+
+        // 2. Carregar a lista para a Dropdown, EXCLUINDO a própria categoria
+        // (Não podemos ser pai de nós mesmos)
+        ListaCategorias = await context.Categorias
+                                       .Where(c => c.Id != Id)
+                                       .ToListAsync();
+    }
+
+    private async Task UpdateCategoria()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(Categoria!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!CategoriaExists(Categoria!.Id))
+            {
+                NavigationManager.NavigateTo("notfound");
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/categorias");
+    }
+
+    private bool CategoriaExists(int id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.Categorias.Any(e => e.Id == id);
+    }
+}

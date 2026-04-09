@@ -1,0 +1,205 @@
+﻿@page "/encomendas/details"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@using MyCOLL.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Gerir Encomenda</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Gerir Encomenda #@Id</h1>
+    <a href="/encomendas" class="btn btn-outline-secondary">Voltar à Lista</a>
+</div>
+
+@if (encomenda is null)
+{
+    <div class="alert alert-info">A carregar dados...</div>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div>
+                <strong>Cliente:</strong> @(clienteNome ?? "Cliente não encontrado (" + encomenda.ClienteId + ")")
+            </div>
+            <div>
+                Estado Atual: <span class="badge @GetBadgeClass(encomenda.Estado)">@encomenda.Estado</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Data:</strong> @encomenda.DataEncomenda.ToString("dd/MM/yyyy HH:mm")</p>
+                    <p><strong>NIF:</strong> @(clienteNIF ?? "N/A")</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <h3 class="text-primary">@encomenda.ValorTotal.ToString("C2")</h3>
+                </div>
+            </div>
+
+            <hr />
+
+            <h5>Itens da Encomenda:</h5>
+            <table class="table table-bordered table-sm mt-2">
+                <thead class="table-light">
+                    <tr>
+                        <th>Produto</th>
+                        <th class="text-center">Qtd</th>
+                        <th class="text-end">Preço Unit.</th>
+                        <th class="text-end">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (encomenda.Detalhes != null)
+                    {
+                        @foreach (var item in encomenda.Detalhes)
+                        {
+                            <tr>
+                                <td>@(item.Produto?.Nome ?? "Produto Removido")</td>
+                                <td class="text-center">@item.Quantidade</td>
+                                <td class="text-end">@item.PrecoUnitario.ToString("C2")</td>
+                                <td class="text-end">@((item.Quantidade * item.PrecoUnitario).ToString("C2"))</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card-footer bg-white">
+            <h5>Ações:</h5>
+            <div class="d-flex gap-2">
+                @if (encomenda.Estado == EstadoEncomenda.Pendente)
+                {
+                    <button class="btn btn-success" @onclick="ConfirmarPagamento">
+                        <i class="bi bi-check-lg"></i> Confirmar Pagamento
+                    </button>
+
+                    <button class="btn btn-danger" @onclick="AnularEncomenda">
+                        <i class="bi bi-x-circle"></i> Rejeitar / Anular
+                    </button>
+                }
+                else if (encomenda.Estado == EstadoEncomenda.Paga)
+                {
+ 
+                    <button class="btn btn-primary" @onclick="ExpedirEncomenda">
+                        <i class="bi bi-box-seam"></i> Expedir Encomenda
+                    </button>
+                }
+                else if (encomenda.Estado == EstadoEncomenda.Enviada)
+                {
+                    <div class="alert alert-info d-flex align-items-center mb-0 px-2 py-1">
+                        <small><i class="bi bi-info-circle me-1"></i> A encomenda já foi expedida.</small>
+                    </div>
+
+                    <button class="btn btn-success ms-2" @onclick="ConfirmarEntrega">
+                        <i class="bi bi-box2-heart-fill"></i> Confirmar Entrega ao Cliente
+                    </button>
+                }
+                else if (encomenda.Estado == EstadoEncomenda.Entregue)
+                {
+                    <span class="text-success fw-bold">
+                        <i class="bi bi-check-all"></i> Encomenda Entregue e Fechada.
+                    </span>
+                }
+                else if (encomenda.Estado == EstadoEncomenda.Cancelada)
+                {
+                    <span class="text-danger fw-bold">Enc. Anulada.</span>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Encomenda? encomenda;
+    private ApplicationDbContext context = default!;
+
+    // Variáveis para guardar os dados do cliente carregados manualmente
+    private string? clienteNome;
+    private string? clienteNIF;
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        context = DbFactory.CreateDbContext();
+        await CarregarDados();
+    }
+
+    private async Task CarregarDados()
+    {
+        // REMOVIDO: .Include(e => e.Cliente) porque a propriedade não existe
+        encomenda = await context.Encomendas
+            .Include(e => e.Detalhes!)
+                .ThenInclude(d => d.Produto)
+            .FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (encomenda is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+            return;
+        }
+
+        // CARREGAR CLIENTE MANUALMENTE
+        if (!string.IsNullOrEmpty(encomenda.ClienteId))
+        {
+            var user = await UserManager.FindByIdAsync(encomenda.ClienteId);
+            if (user != null)
+            {
+                clienteNome = !string.IsNullOrEmpty(user.Nome) ? user.Nome : user.Email;
+                clienteNIF = user.NIF;
+            }
+        }
+    }
+
+    private async Task ConfirmarPagamento()
+    {
+        encomenda!.Estado = EstadoEncomenda.Paga;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task ExpedirEncomenda()
+    {
+        encomenda!.Estado = EstadoEncomenda.Enviada;
+        await context.SaveChangesAsync();
+        await JS.InvokeVoidAsync("alert", "Encomenda marcada como Enviada!");
+    }
+
+    private async Task AnularEncomenda()
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "Tem a certeza que quer anular?"))
+        {
+            encomenda!.Estado = EstadoEncomenda.Cancelada;
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private string GetBadgeClass(EstadoEncomenda estado) => estado switch
+    {
+        EstadoEncomenda.Pendente => "bg-warning text-dark",
+        EstadoEncomenda.Paga => "bg-info text-dark",
+        EstadoEncomenda.Enviada => "bg-success",
+        EstadoEncomenda.Cancelada => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private async Task ConfirmarEntrega()
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "Confirma que o cliente recebeu a encomenda?"))
+        {
+            encomenda!.Estado = EstadoEncomenda.Entregue;
+            await context.SaveChangesAsync();
+        }
+    }
+
+    public void Dispose() => context?.Dispose();
+}

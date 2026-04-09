@@ -1,0 +1,168 @@
+﻿@page "/gestao-utilizadores"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using MyCOLL.Data
+@using MyCOLL.Shared.Enums
+@inject UserManager<ApplicationUser> UserManager
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JS
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>Gestão de Utilizadores</PageTitle>
+
+<h1>Gestão de Utilizadores</h1>
+
+<div class="table-responsive">
+    <QuickGrid Class="table table-hover align-middle" Items="UsersQuery" Pagination="pagination">
+        <PropertyColumn Property="u => u.Email" Sortable="true" />
+        <PropertyColumn Property="u => u.Nome" Sortable="true" />
+        <PropertyColumn Property="u => u.NIF" />
+
+        <TemplateColumn Title="Tipo / Role" Sortable="true">
+            @switch (context.Tipo)
+            {
+                case TipoUtilizador.Admin:
+                    <span class="badge bg-danger">Administrador</span>
+                    break;
+                case TipoUtilizador.Funcionario:
+                    <span class="badge bg-primary">Funcionário</span>
+                    break;
+                case TipoUtilizador.Fornecedor:
+                    <span class="badge bg-warning text-dark">Fornecedor</span>
+                    break;
+                default:
+                    <span class="badge bg-secondary">Cliente</span>
+                    break;
+            }
+        </TemplateColumn>
+
+        <TemplateColumn Title="Estado Conta">
+            @switch (context.EstadoConta)
+            {
+                case EstadoConta.Ativo:
+                    <span class="badge bg-success">Ativo</span>
+                    break;
+                case EstadoConta.Pendente:
+                    <span class="badge bg-warning text-dark">Pendente</span>
+                    break;
+                case EstadoConta.Suspenso:
+                    <span class="badge bg-danger">Suspenso</span>
+                    break;
+            }
+        </TemplateColumn>
+
+        <TemplateColumn Title="Ações">
+            @if (context.UserName != currentUserName)
+            {
+                @* LÓGICA DE BOTÕES INTELIGENTE (Aprovar / Suspender / Reativar) *@
+                @if (context.EstadoConta == EstadoConta.Pendente)
+                {
+                    <button class="btn btn-sm btn-success me-1" @onclick="() => MudarEstado(context, EstadoConta.Ativo)" title="Aprovar Registo">
+                        <i class="bi bi-check-lg"></i> Aprovar
+                    </button>
+                }
+                else if (context.EstadoConta == EstadoConta.Ativo)
+                {
+                    <button class="btn btn-sm btn-outline-danger me-1" @onclick="() => MudarEstado(context, EstadoConta.Suspenso)" title="Suspender Conta">
+                        <i class="bi bi-pause-fill"></i> Suspender
+                    </button>
+                }
+                else // Suspenso
+                {
+                    <button class="btn btn-sm btn-outline-success me-1" @onclick="() => MudarEstado(context, EstadoConta.Ativo)" title="Reativar Conta">
+                        <i class="bi bi-play-fill"></i> Reativar
+                    </button>
+                }
+            }
+            else
+            {
+                <span class="text-muted small me-2">(Você)</span>
+            }
+
+            @* Botão para promover a Funcionário (Apenas para Clientes/Funcionários) *@
+            @if (context.Tipo == TipoUtilizador.Cliente || context.Tipo == TipoUtilizador.Funcionario)
+            {
+                <button class="btn btn-sm btn-outline-info" @onclick="() => ToggleFuncionario(context)">
+                    @(context.Tipo == TipoUtilizador.Funcionario ? "Remover Func." : "Tornar Func.")
+                </button>
+            }
+        </TemplateColumn>
+    </QuickGrid>
+</div>
+
+<Paginator State="pagination" />
+
+@code {
+    private ApplicationDbContext dbContext = default!;
+    private PaginationState pagination = new PaginationState { ItemsPerPage = 10 };
+    private IQueryable<ApplicationUser> UsersQuery => dbContext.Users;
+    private string currentUserName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Contexto APENAS para leitura na Grid
+        dbContext = DbFactory.CreateDbContext();
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        currentUserName = authState.User.Identity?.Name ?? "";
+    }
+
+    // Método Genérico para mudar Estado (Aprovar, Suspender, Ativar)
+    private async Task MudarEstado(ApplicationUser userUi, EstadoConta novoEstado)
+    {
+        if (userUi.UserName == currentUserName) return; 
+
+        
+        var userToUpdate = await UserManager.FindByIdAsync(userUi.Id);
+        if (userToUpdate == null) return;
+
+        
+        userToUpdate.EstadoConta = novoEstado;
+
+        var result = await UserManager.UpdateAsync(userToUpdate);
+
+        if (result.Succeeded)
+        {
+            // Atualizar visualmente o objeto da UI para refletir a mudança instantaneamente
+            userUi.EstadoConta = novoEstado;
+        }
+    }
+
+    // Promover ou Despromover Funcionário
+    private async Task ToggleFuncionario(ApplicationUser userUi)
+    {
+        
+        if (userUi.Tipo == TipoUtilizador.Fornecedor || userUi.Tipo == TipoUtilizador.Admin) return;
+
+        var userToUpdate = await UserManager.FindByIdAsync(userUi.Id);
+        if (userToUpdate == null) return;
+
+        if (userToUpdate.Tipo == TipoUtilizador.Funcionario)
+        {
+            // Despromover: Passa a Cliente
+            userToUpdate.Tipo = TipoUtilizador.Cliente;
+            await UserManager.RemoveFromRoleAsync(userToUpdate, "Funcionario");
+            await UserManager.AddToRoleAsync(userToUpdate, "Cliente");
+        }
+        else if (userToUpdate.Tipo == TipoUtilizador.Cliente)
+        {
+            // Promover: Passa a Funcionário
+            userToUpdate.Tipo = TipoUtilizador.Funcionario;
+            await UserManager.RemoveFromRoleAsync(userToUpdate, "Cliente");
+            await UserManager.AddToRoleAsync(userToUpdate, "Funcionario");
+        }
+
+        var result = await UserManager.UpdateAsync(userToUpdate);
+
+        if (result.Succeeded)
+        {
+            // Atualizar visualmente o objeto da UI
+            userUi.Tipo = userToUpdate.Tipo;
+        }
+    }
+
+    public void Dispose() => dbContext?.Dispose();
+}

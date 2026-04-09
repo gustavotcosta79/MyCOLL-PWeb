@@ -1,0 +1,182 @@
+﻿@page "/produtos"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using MyCOLL.Shared
+@using MyCOLL.Shared.Enums
+@inject IConfiguration Configuration
+@using MyCOLL.Data
+@implements IAsyncDisposable
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Gestão de Produtos</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Gestão de Produtos</h1>
+    <a href="produtos/create" class="btn btn-success">
+        <i class="bi bi-plus-lg"></i> Novo Produto
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body bg-light">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="filterPending" 
+                   @bind="ShowOnlyPending" @bind:after="RefreshData">
+            <label class="form-check-label fw-bold text-danger" for="filterPending">
+                ⚠️ Mostrar Apenas Pendentes (Aprovação Necessária)
+            </label>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    @* PROTEÇÃO: Enquanto carrega, mostra isto e não toca na BD *@
+    <div class="text-center p-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">A carregar...</span>
+        </div>
+        <p class="mt-2">A carregar produtos e fornecedores...</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <QuickGrid Class="table table-hover align-middle" Items="FilteredProducts" Pagination="pagination">
+
+            <TemplateColumn Title="Img">
+                @{
+                    // 1. Preparar a base (garantir que não tem barra no fim)
+                    var baseUrl = UrlBaseImagens.TrimEnd('/');
+
+                    // 2. Decidir o caminho relativo (se vazio, usa a imagem padrão)
+                    var caminhoRelativo = !string.IsNullOrEmpty(context.ImagemUrl)
+                    ? context.ImagemUrl
+                    : "img/sem-imagem.png";
+
+                    // 3. Limpar barra inicial do caminho para não ficar "//"
+                    caminhoRelativo = caminhoRelativo.TrimStart('/');
+
+                    // 4. Construir URL final
+                    var imagemFinal = $"{baseUrl}/{caminhoRelativo}";
+                }
+
+                <img src="@imagemFinal" alt="img"
+                     style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;" />
+            </TemplateColumn>
+
+
+            <PropertyColumn Property="p => p.Nome" Sortable="true" />
+            
+            <TemplateColumn Title="Categoria" Sortable="true">
+                @context.Categoria?.Nome
+            </TemplateColumn>
+
+            <PropertyColumn Property="p => p.PrecoVenda" Title="Preço" Format="C2" Sortable="true" />
+            <PropertyColumn Property="p => p.Stock" Sortable="true" />
+
+            <TemplateColumn Title="Estado" Sortable="true" SortBy="SortByEstado">
+                @switch (context.Estado)
+                {
+                    case EstadoProduto.Pendente:
+                        <span class="badge bg-warning text-dark">Pendente</span>
+                        break;
+                    case EstadoProduto.Ativo:
+                        <span class="badge bg-success">Ativo</span>
+                        break;
+                    case EstadoProduto.Vendido:
+                        <span class="badge bg-secondary">Vendido</span>
+                        break;
+                    case EstadoProduto.Suspenso:
+                        <span class="badge bg-danger">Suspenso</span>
+                        break;
+                }
+            </TemplateColumn>
+
+            <TemplateColumn Title="Fornecedor">
+                <small class="text-muted">
+                    @(ObterNomeFornecedor(context.FornecedorId))
+                </small>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Ações">
+                <a href="@($"produtos/edit?id={context.Id}")" class="btn btn-warning btn-sm" title="Editar">
+                    <i class="bi bi-pencil"></i>
+                </a> 
+                <a href="@($"produtos/details?id={context.Id}")" class="btn btn-info btn-sm" title="Detalhes">
+                    <i class="bi bi-eye"></i>
+                </a> 
+                <a href="@($"produtos/delete?id={context.Id}")" class="btn btn-danger btn-sm" title="Apagar">
+                    <i class="bi bi-trash"></i>
+                </a>
+            </TemplateColumn>
+        </QuickGrid>
+    </div>
+
+    <Paginator State="pagination" />
+}
+
+@code {
+    private ApplicationDbContext context = default!;
+    private PaginationState pagination = new PaginationState { ItemsPerPage = 10 };
+    private bool ShowOnlyPending = false;
+
+    private string UrlBaseImagens => Configuration["UrlImagens"] ?? "https://localhost:7242";
+    
+    private bool isLoading = true;
+
+    private Dictionary<string, string> NomesFornecedores = new();
+
+    private IQueryable<Produto> FilteredProducts
+    {
+        get
+        {
+            var query = context.Produtos.Include(p => p.Categoria).AsQueryable();
+            if (ShowOnlyPending)
+            {
+                query = query.Where(p => p.Estado == EstadoProduto.Pendente);
+            }
+            return query.OrderByDescending(p => p.Id);
+        }
+    }
+
+    GridSort<Produto> SortByEstado = GridSort<Produto>.ByAscending(p => p.Estado);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Criar o contexto principal
+        context = DbFactory.CreateDbContext();
+
+        try 
+        {
+            // Isto garante que o 'context' principal não é tocado
+            using var userContext = DbFactory.CreateDbContext();
+            
+            var users = await userContext.Users
+                .Where(u => u.Tipo == TipoUtilizador.Fornecedor)
+                .Select(u => new { u.Id, u.Nome, u.UserName })
+                .ToListAsync();
+
+            foreach (var u in users)
+            {
+                NomesFornecedores[u.Id] = string.IsNullOrEmpty(u.Nome) ? u.UserName! : u.Nome;
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RefreshData() => StateHasChanged();
+
+    private string ObterNomeFornecedor(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return "-";
+        return NomesFornecedores.ContainsKey(id) ? NomesFornecedores[id] : "Desconhecido";
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+}

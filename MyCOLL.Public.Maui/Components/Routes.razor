@@ -1,0 +1,8 @@
+﻿@using MyCOLL.RCL.Components.Layout
+
+<Router AppAssembly="@typeof(MyCOLL.RCL.Components.Layout.MainLayout).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+</Router>

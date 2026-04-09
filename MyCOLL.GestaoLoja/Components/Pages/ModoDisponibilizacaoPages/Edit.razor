@@ -1,0 +1,101 @@
+﻿@page "/mododisponibilizacaos/edit"
+@using Microsoft.EntityFrameworkCore
+@using MyCOLL.Shared
+@inject IDbContextFactory<MyCOLL.Data.ApplicationDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin, Funcionario")]
+
+<PageTitle>Edit</PageTitle>
+
+<h1>Edit</h1>
+
+<h2>ModoDisponibilizacao</h2>
+<hr />
+@if (ModoDisponibilizacao is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <EditForm method="post" Model="ModoDisponibilizacao" OnValidSubmit="UpdateModoDisponibilizacao" FormName="edit" Enhance>
+                <DataAnnotationsValidator />
+                <ValidationSummary role="alert"/>
+                <input type="hidden" name="ModoDisponibilizacao.Id" value="@ModoDisponibilizacao.Id" />
+                <div class="mb-3">
+                    <label for="nome" class="form-label">Nome:</label>
+                    <InputText id="nome" @bind-Value="ModoDisponibilizacao.Nome" class="form-control" aria-required="true"/>
+                    <ValidationMessage For="() => ModoDisponibilizacao.Nome" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="detalhe" class="form-label">Detalhe:</label>
+                    <InputText id="detalhe" @bind-Value="ModoDisponibilizacao.Detalhe" class="form-control" />
+                    <ValidationMessage For="() => ModoDisponibilizacao.Detalhe" class="text-danger" />
+                </div>
+                <div class="mb-3">
+                    <label for="ativo" class="form-label">Ativo:</label>
+                    <InputCheckbox id="ativo" @bind-Value="ModoDisponibilizacao.Ativo" class="form-check-input" />
+                    <ValidationMessage For="() => ModoDisponibilizacao.Ativo" class="text-danger" />
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div>
+    <a href="/mododisponibilizacaos">Back to List</a>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    [SupplyParameterFromForm]
+    private ModoDisponibilizacao? ModoDisponibilizacao { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        ModoDisponibilizacao ??= await context.ModosDisponibilizacao.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (ModoDisponibilizacao is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+        }
+    }
+
+    // To protect from overposting attacks, enable the specific properties you want to bind to.
+    // For more information, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task UpdateModoDisponibilizacao()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Attach(ModoDisponibilizacao!).State = EntityState.Modified;
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!ModoDisponibilizacaoExists(ModoDisponibilizacao!.Id))
+            {
+                NavigationManager.NavigateTo("notfound");
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        NavigationManager.NavigateTo("/mododisponibilizacaos");
+    }
+
+    private bool ModoDisponibilizacaoExists(int id)
+    {
+        using var context = DbFactory.CreateDbContext();
+        return context.ModosDisponibilizacao.Any(e => e.Id == id);
+    }
+}

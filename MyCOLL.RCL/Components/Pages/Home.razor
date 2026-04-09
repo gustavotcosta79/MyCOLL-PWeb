@@ -1,0 +1,298 @@
+﻿@page "/"
+@using MyCOLL.Shared
+@using MyCOLL.RCL.Services
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+@inject ApiService ApiService
+@inject IJSRuntime JS
+@inject CarrinhoService CarrinhoSvc
+
+<PageTitle>MyCOLL - Home</PageTitle>
+
+@* BANNER *@
+<div class="p-4 mb-5 bg-light rounded-3 shadow-sm d-flex align-items-center justify-content-between"
+     style="background: linear-gradient(to right, #eef2f3, #8e9eab);">
+    <div>
+        <h1 class="display-5 fw-bold text-dark">Bem-vindo ao MyCOLL</h1>
+        <p class="col-md-10 fs-5 mb-0 text-muted">A sua plataforma premium de colecionáveis.</p>
+    </div>
+</div>
+
+@if (CategoriasRaiz == null)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    @* --- SLIDER 1: CATEGORIAS PRINCIPAIS --- *@
+    <h5 class="fw-bold mb-3"><i class="bi bi-grid-fill me-2"></i>Categorias Principais</h5>
+    <div class="slider-wrapper mb-4">
+        <button class="scroll-btn" @onclick='() => Scroll("slider1", -200)'><i class="bi bi-chevron-left"></i></button>
+
+        <div id="slider1" class="horizontal-scroll">
+            @* Botão "Todas" *@
+            <div class="category-card @(SelectedMain == null ? "selected" : "")" @onclick="LimparFiltros" style="background: linear-gradient(135deg, #6c757d, #495057);">
+                <div class="category-content">
+                    <span class="fw-bold">Todas</span>
+                </div>
+            </div>
+
+            @foreach (var cat in CategoriasRaiz)
+            {
+                <div class="category-card @(SelectedMain?.Id == cat.Id ? "selected" : "")" @onclick="() => SelectMain(cat)">
+                    <div class="category-content">
+                        <span class="fw-bold">@cat.Nome</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <button class="scroll-btn" @onclick='() => Scroll("slider1", 200)'><i class="bi bi-chevron-right"></i></button>
+    </div>
+
+    @* --- SLIDER 2: SUB-CATEGORIAS --- *@
+    @if (SubCategorias != null && SubCategorias.Any())
+    {
+        <h5 class="fw-bold mb-3 animate-fade-in text-secondary">
+            <i class="bi bi-arrow-return-right me-2"></i>Sub-Categorias
+        </h5>
+        <div class="slider-wrapper mb-4 animate-fade-in">
+            <button class="scroll-btn" @onclick='() => Scroll("slider2", -200)'><i class="bi bi-chevron-left"></i></button>
+            <div id="slider2" class="horizontal-scroll">
+                @foreach (var sub in SubCategorias)
+                {
+                    <div class="category-card @(SelectedSub?.Id == sub.Id ? "selected" : "")"
+                         @onclick="() => SelectSub(sub)"
+                         style="@(SelectedSub?.Id == sub.Id ? "" : "background: linear-gradient(135deg, #a855f7, #7e22ce);")">
+
+                        <div class="category-content">
+                            <span class="fw-bold fs-5">@sub.Nome</span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <button class="scroll-btn" @onclick='() => Scroll("slider2", 200)'><i class="bi bi-chevron-right"></i></button>
+        </div>
+    }
+
+    @* --- SLIDER 3: SUB-SUB-CATEGORIAS --- *@
+    @if (SubSubCategorias != null && SubSubCategorias.Any())
+    {
+        <h5 class="fw-bold mb-3 animate-fade-in text-muted">
+            <i class="bi bi-diagram-3 me-2"></i>Especificações
+        </h5>
+        <div class="slider-wrapper mb-5 animate-fade-in">
+            <button class="scroll-btn" @onclick='() => Scroll("slider3", -200)'><i class="bi bi-chevron-left"></i></button>
+            <div id="slider3" class="horizontal-scroll">
+                @foreach (var subsub in SubSubCategorias)
+                {
+                    <div class="category-card @(SelectedSubSub?.Id == subsub.Id ? "selected" : "")"
+                         @onclick="() => SelectSubSub(subsub)"
+                         style="@(SelectedSubSub?.Id == subsub.Id ? "" : "background: linear-gradient(135deg, #10b981, #059669);")">
+
+                        <div class="category-content">
+                            <span class="fw-bold">@subsub.Nome</span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <button class="scroll-btn" @onclick='() => Scroll("slider3", 200)'><i class="bi bi-chevron-right"></i></button>
+        </div>
+    }
+}
+
+@* --- LISTA DE PRODUTOS --- *@
+<h3 class="mt-2 mb-3 border-bottom pb-2">
+    @(SelectedMain == null ? "Todos os Produtos" : $"{SelectedMain.Nome} {(SelectedSub != null ? " > " + SelectedSub.Nome : "")}")
+</h3>
+
+@if (ProdutosFiltrados == null || !ProdutosFiltrados.Any())
+{
+    <div class="alert alert-light text-center border p-5">
+        <i class="bi bi-box-seam fs-1 text-muted d-block mb-3"></i>
+        <p>Não há produtos nesta categoria.</p>
+    </div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4 mb-5">
+        @foreach (var prod in ProdutosFiltrados)
+        {
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0 product-card">
+
+                    @* TORNAR O CARTÃO CLICÁVEL (Link para Detalhes) *@
+                    <a href="produto/@prod.Id" class="text-decoration-none text-dark">
+
+                        <div class="position-relative">
+                            @if (!string.IsNullOrEmpty(prod.ImagemUrl))
+                            {
+                                @* FIX: Usar ObterImagemSrc para funcionar no Android *@
+                                <img src="@ObterImagemSrc(prod.ImagemUrl)" class="card-img-top product-card-img" alt="@prod.Nome">
+                            }
+                            else
+                            {
+                                <div class="card-img-top product-card-img d-flex align-items-center justify-content-center bg-light">
+                                    <i class="bi bi-image text-muted fs-1"></i>
+                                </div>
+                            }
+                            <span class="position-absolute top-0 end-0 badge bg-primary m-2 shadow-sm">@prod.Categoria?.Nome</span>
+                        </div>
+
+                        <div class="card-body">
+                            <h5 class="card-title text-truncate" title="@prod.Nome">@prod.Nome</h5>
+
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="fs-5 fw-bold text-primary">@prod.PrecoVenda.ToString("C2")</span>
+
+                                @* BOTÃO DE ADICIONAR *@
+                                <button class="btn btn-outline-primary btn-sm rounded-circle shadow-sm"
+                                        @onclick:preventDefault
+                                        @onclick:stopPropagation
+                                        @onclick="() => Adicionar(prod)">
+                                    <i class="bi bi-cart-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </a>
+
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .product-card {
+        transition: transform 0.2s;
+    }
+
+        .product-card:hover {
+            transform: translateY(-5px);
+        }
+</style>
+
+@code {
+    private List<Categoria> TodasCategorias = new();
+    private List<Produto> TodosProdutos = new();
+    private List<Categoria> CategoriasRaiz => TodasCategorias.Where(c => c.CategoriaPaiId == null).ToList();
+    private List<Categoria>? SubCategorias;
+    private List<Categoria>? SubSubCategorias;
+
+    private Categoria? SelectedMain;
+    private Categoria? SelectedSub;
+    private Categoria? SelectedSubSub;
+    private IEnumerable<Produto>? ProdutosFiltrados;
+
+    // --- FIX: USAR OnAfterRenderAsync para carregar dados de forma segura no Android ---
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // 1. Inicializa o carrinho (para podermos adicionar produtos)
+            await CarrinhoSvc.Inicializar();
+
+            // 2. Carrega produtos e categorias da API
+            var cats = await ApiService.GetCategorias();
+            var prods = await ApiService.GetProdutos();
+
+            if (cats != null) TodasCategorias = cats;
+            if (prods != null) TodosProdutos = prods;
+
+            ProdutosFiltrados = TodosProdutos;
+
+            // 3. Atualiza o ecrã
+            StateHasChanged();
+        }
+    }
+
+    private async Task Adicionar(Produto p)
+    {
+        await CarrinhoSvc.Adicionar(p);
+        await JS.InvokeVoidAsync("alert", $"'{p.Nome}' adicionado ao carrinho!");
+    }
+
+    // Chamada JS para fazer scroll
+    private async Task Scroll(string elementId, int amount)
+    {
+        await JS.InvokeVoidAsync("scrollSlider", elementId, amount);
+    }
+
+    private void SelectMain(Categoria cat)
+    {
+        SelectedMain = cat;
+        SelectedSub = null; SelectedSubSub = null;
+        SubCategorias = cat.SubCategorias?.ToList();
+        SubSubCategorias = null;
+        FiltrarProdutos();
+    }
+
+    private void SelectSub(Categoria cat)
+    {
+        SelectedSub = cat;
+        SelectedSubSub = null;
+        SubSubCategorias = cat.SubCategorias?.ToList();
+        FiltrarProdutos();
+    }
+
+    private void SelectSubSub(Categoria cat)
+    {
+        SelectedSubSub = cat;
+        FiltrarProdutos();
+    }
+
+    private void LimparFiltros()
+    {
+        SelectedMain = null;
+        SelectedSub = null; SelectedSubSub = null;
+        SubCategorias = null; SubSubCategorias = null;
+        ProdutosFiltrados = TodosProdutos;
+    }
+
+    private void FiltrarProdutos()
+    {
+        if (SelectedMain == null) { ProdutosFiltrados = TodosProdutos; return; }
+        var categoriaAlvo = SelectedSubSub ?? SelectedSub ?? SelectedMain;
+        var idsParaMostrar = ObterIdsRecursivos(categoriaAlvo);
+        ProdutosFiltrados = TodosProdutos.Where(p => idsParaMostrar.Contains(p.CategoriaId)).ToList();
+    }
+
+    private HashSet<int> ObterIdsRecursivos(Categoria cat)
+    {
+        var ids = new HashSet<int> { cat.Id };
+        if (cat.SubCategorias != null)
+            foreach (var sub in cat.SubCategorias) ids.UnionWith(ObterIdsRecursivos(sub));
+        return ids;
+    }
+
+    // --- FIX: Método para corrigir URL das imagens no Android ---
+    private string ObterImagemSrc(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+
+        // Se começar por http ou https, é um link externo (não mexe)
+        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        // Se for local, concatena com o URL base correto (localhost ou 10.0.2.2)
+        return $"{ApiService.UrlApi}{url}";
+    }
+}

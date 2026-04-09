@@ -1,0 +1,35 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+@using MyCOLL.RCL
+@* @using MyCOLL.RCL.Layout
+ *@
+@* 1. OBRIGATÓRIO: Envolver a App com o Estado de Autenticação *@
+<CascadingAuthenticationState>
+    
+    <Router AppAssembly="@typeof(App).Assembly" AdditionalAssemblies="new[] { typeof(MainLayout).Assembly }">
+        <Found Context="routeData">
+            @* 2. MELHORIA: Usar AuthorizeRouteView em vez de RouteView *@
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        @* Se tentar aceder a página privada sem login, manda para o Login *@
+                        <RedirectToLogin />
+                    }
+                    else
+                    {
+                        <p role="alert">Não tens permissão para ver esta página.</p>
+                    }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <p role="alert">Sorry, there's nothing at this address.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
+
+</CascadingAuthenticationState>
